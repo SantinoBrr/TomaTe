@@ -56,6 +56,7 @@ exports.handler = async (event) => {
       };
     }
 
+    const isSandbox = MP_ACCESS_TOKEN.startsWith('TEST-');
     return {
       statusCode: 200,
       headers: {
@@ -63,8 +64,8 @@ exports.handler = async (event) => {
         'Access-Control-Allow-Origin': '*',
       },
       body: JSON.stringify({
-        init_point: data.init_point,
-        sandbox_init_point: data.sandbox_init_point,
+        checkout_url: isSandbox ? data.sandbox_init_point : data.init_point,
+        is_sandbox: isSandbox,
         id: data.id,
       }),
     };

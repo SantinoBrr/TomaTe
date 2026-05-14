@@ -897,9 +897,10 @@ footer{background:var(--vd);padding:1.6rem 0 1.4rem;margin-top:0}
             <div class="form-group"><label for="piso">Piso / Depto (opcional)</label><input type="text" id="piso" placeholder="Ej: 3° B"/></div>
           </div>
           <div class="form-row">
-            <div class="form-group"><label for="barrio">Barrio</label><input type="text" id="barrio" placeholder="Ej: Palermo"/></div>
-            <div class="form-group"><label for="localidad">Localidad</label><input type="text" id="localidad" placeholder="Ej: CABA"/></div>
+            <div class="form-group"><label for="barrio">Barrio</label><input type="text" id="barrio" placeholder="Ej: Palermo" oninput="calcularEnvio()"/></div>
+            <div class="form-group"><label for="localidad">Localidad</label><input type="text" id="localidad" placeholder="Ej: CABA" oninput="calcularEnvio()"/></div>
           </div>
+          <div id="shipping-cost-display" style="font-size:.82rem;color:var(--vd);background:var(--vp);border-radius:10px;padding:.65rem .95rem;margin:.2rem 0 .75rem;min-height:2rem;line-height:1.5"></div>
           <div class="form-row full">
             <div class="form-group"><label for="referencias">Referencias (opcional)</label><textarea id="referencias" placeholder="Entre calles, timbre, código de ingreso..."></textarea></div>
           </div>
@@ -1615,11 +1616,14 @@ function renderSummaryStep1(){
     `<div class="summary-total"><span>Total productos</span><span>$${getTotal().toLocaleString('es-AR')}</span></div>`;
 }
 function renderFinalSummary(){
-  const sub=getTotal(), tot=sub;
+  const sub=getTotal();
+  const envio=deliveryType==='domicilio'?(window._envioCalculado||0):0;
+  const tot=sub+envio;
+  const envioLabel=envio?`$${envio.toLocaleString('es-AR')}`:'A coordinar por WhatsApp';
   document.getElementById('ossf').innerHTML=
     Object.values(cart).map(i=>`<div class="summary-item"><span>${i.emoji} ${i.name} × ${i.qty}</span><span><strong>$${(i.price*i.qty).toLocaleString('es-AR')}</strong></span></div>`).join('')+
-    (deliveryType==='domicilio'?`<div class="summary-item"><span>🚚 Envío</span><span><strong>A coordinar según tu zona</strong></span></div>`:'')+
-    `<div class="summary-total"><span>${deliveryType==='domicilio'?'Subtotal (sin envío)':'Total'}</span><span>$${tot.toLocaleString('es-AR')}</span></div>`;
+    (deliveryType==='domicilio'?`<div class="summary-item"><span>🚚 Envío</span><span><strong>${envioLabel}</strong></span></div>`:'')+
+    `<div class="summary-total"><span>Total</span><span>$${tot.toLocaleString('es-AR')}${deliveryType==='domicilio'&&!envio?' <small style="font-weight:300;font-size:.72rem">+ envío</small>':''}</span></div>`;
   const n=document.getElementById('nombre').value, a=document.getElementById('apellido').value;
   const e=document.getElementById('email').value, t=document.getElementById('telefono').value;
   document.getElementById('osd').innerHTML=
@@ -1650,8 +1654,61 @@ function renderFinalSummary(){
     if(confirmBtn) confirmBtn.textContent='✓ Confirmar pedido';
   }
 }
+/* =============================================
+   CÁLCULO DE ENVÍO
+   Local: Roberto Wernicke 1534, Villa Adelina, San Isidro
+   ============================================= */
+const LOCAL_LAT = -34.5031;
+const LOCAL_LNG = -58.5265;
+
+// 💡 MODIFICAR tarifas según tu criterio:
+const SHIPPING_RATES = [
+  { maxKm:  5, price:  1200, label: 'zona cercana'   },
+  { maxKm: 15, price:  1800, label: 'GBA zona 1'     },
+  { maxKm: 30, price:  2500, label: 'GBA zona 2'     },
+  { maxKm: 50, price:  3500, label: 'GBA zona 3'     },
+  { maxKm: Infinity, price: null, label: 'zona lejana' },
+];
+
+function haversineKm(lat1, lng1, lat2, lng2) {
+  const R = 6371;
+  const dLat = (lat2 - lat1) * Math.PI / 180;
+  const dLng = (lng2 - lng1) * Math.PI / 180;
+  const a = Math.sin(dLat/2)**2 + Math.cos(lat1*Math.PI/180)*Math.cos(lat2*Math.PI/180)*Math.sin(dLng/2)**2;
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+}
+
+async function calcularEnvio() {
+  const barrio   = document.getElementById('barrio').value.trim();
+  const localidad= document.getElementById('localidad').value.trim();
+  const calle    = document.getElementById('calle').value.trim();
+  const el       = document.getElementById('shipping-cost-display');
+  if (!el) return;
+  if (!barrio && !localidad) { el.textContent = ''; return; }
+
+  el.textContent = '⏳ Calculando...';
+  const query = encodeURIComponent(`${calle} ${barrio} ${localidad} Buenos Aires Argentina`);
+  try {
+    const res  = await fetch(`https://nominatim.openstreetmap.org/search?q=${query}&format=json&limit=1`,
+      { headers: { 'Accept-Language': 'es' } });
+    const data = await res.json();
+    if (!data.length) { el.textContent = 'No pudimos calcular el envío. Se coordinará por WhatsApp.'; return; }
+    const km = haversineKm(LOCAL_LAT, LOCAL_LNG, parseFloat(data[0].lat), parseFloat(data[0].lon));
+    const tier = SHIPPING_RATES.find(r => km <= r.maxKm);
+    if (tier.price === null) {
+      el.innerHTML = `📍 ${km.toFixed(0)} km — <strong>Zona sin cobertura de envío.</strong> Contactanos para coordinar.`;
+    } else {
+      el.innerHTML = `📍 ${km.toFixed(0)} km de distancia — Envío estimado: <strong>$${tier.price.toLocaleString('es-AR')}</strong> (${tier.label})`;
+      window._envioCalculado = tier.price;
+    }
+  } catch {
+    el.textContent = 'No pudimos calcular el envío. Se coordinará por WhatsApp.';
+  }
+}
+
 function selectDelivery(t){
   deliveryType=t;
+  window._envioCalculado = 0;
   document.getElementById('opt-retiro').classList.toggle('selected',t==='retiro');
   document.getElementById('opt-domicilio').classList.toggle('selected',t==='domicilio');
   document.getElementById('domicilio-fields').classList.toggle('visible',t==='domicilio');
@@ -1670,7 +1727,7 @@ function clearSavedAddress(){
 async function submitOrder(){
   const n=document.getElementById('nombre').value, a=document.getElementById('apellido').value;
   const e=document.getElementById('email').value, t=document.getElementById('telefono').value;
-  const tot=getTotal();
+  const tot=getTotal()+(deliveryType==='domicilio'?(window._envioCalculado||0):0);
   saveAddressToProfile().catch(()=>{});
   if(selectedPayment==='mercadopago'){
     await processMercadoPago(n,a,e,t,tot);
@@ -1687,7 +1744,10 @@ async function processMercadoPago(nombre,apellido,email,telefono,total){
     id:String(i.id), title:i.name, description:i.desc,
     quantity:i.qty, unit_price:i.price, currency_id:'ARS'
   }));
-  // El costo de envío se coordina por separado vía WhatsApp
+  const envioCalc = deliveryType==='domicilio' ? (window._envioCalculado||0) : 0;
+  if(envioCalc > 0){
+    mpItems.push({ id:'envio', title:'Envío a domicilio', quantity:1, unit_price:envioCalc, currency_id:'ARS' });
+  }
 
   const origin=window.location.origin||'https://tu-sitio.netlify.app';
 
@@ -1716,7 +1776,7 @@ async function processMercadoPago(nombre,apellido,email,telefono,total){
       if(btn){ btn.disabled=false; btn.textContent='Ir a pagar con MercadoPago →'; }
       return;
     }
-    window.location.href=data.init_point;
+    window.location.href=data.checkout_url;
   } catch(err){
     showToast('❌ Error de conexión. Revisá tu internet e intentá de nuevo.');
     if(btn){ btn.disabled=false; btn.textContent='Ir a pagar con MercadoPago →'; }
