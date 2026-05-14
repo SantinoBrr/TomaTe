@@ -440,7 +440,7 @@ footer{display:flex;align-items:center;justify-content:space-between;padding-top
 /* ── CHECKOUT ── */
 .checkout-view{display:none;max-width:640px;margin:0 auto;padding:clamp(1.5rem,5vw,3rem) clamp(1rem,4vw,2rem)}
 .checkout-view.active{display:block}
-.main-view.hidden{display:none}
+#main-view.hidden{display:none}
 .checkout-back{display:flex;align-items:center;gap:.45rem;background:none;border:none;color:var(--vm);font-family:'Jost',sans-serif;font-size:.88rem;cursor:pointer;margin-bottom:1.6rem;padding:0}
 .checkout-back:hover{color:var(--vd)}
 .checkout-title{font-family:'Playfair Display',serif;font-size:clamp(1.55rem,4vw,2rem);font-weight:400;color:var(--vd);margin-bottom:.35rem}
@@ -878,8 +878,8 @@ footer{background:var(--vd);padding:1.6rem 0 1.4rem;margin-top:0}
         <div class="delivery-option selected" id="opt-retiro" onclick="selectDelivery('retiro')">
           <div class="delivery-radio"><div class="delivery-radio-dot"></div></div>
           <div class="delivery-info">
-            <div class="delivery-name">Retiro en punto de entrega</div>
-            <div class="delivery-desc">Coordinamos un punto de encuentro cercano a vos. Sin costo adicional.</div>
+            <div class="delivery-name">Retirar en el local</div>
+            <div class="delivery-desc">Pasás a retirar tu pedido en nuestro local. Sin cargo adicional.</div>
           </div>
           <div class="delivery-price">Gratis</div>
         </div>
@@ -887,10 +887,9 @@ footer{background:var(--vd);padding:1.6rem 0 1.4rem;margin-top:0}
           <div class="delivery-radio"><div class="delivery-radio-dot"></div></div>
           <div class="delivery-info">
             <div class="delivery-name">Envío a domicilio</div>
-            <!-- 💡 MODIFICAR precio de envío aquí y en JS (COSTO_ENVIO) -->
-            <div class="delivery-desc">Lo llevamos hasta tu puerta. Costo adicional: <strong>$1.500</strong>.</div>
+            <div class="delivery-desc">Lo llevamos hasta tu puerta. El costo varía según tu ubicación y se confirma antes de la entrega.</div>
           </div>
-          <div class="delivery-price">+ $1.500</div>
+          <div class="delivery-price" style="white-space:nowrap;font-size:.78rem">A coordinar</div>
         </div>
         <div class="delivery-fields" id="domicilio-fields">
           <div class="form-row" style="margin-top:1rem">
@@ -914,8 +913,8 @@ footer{background:var(--vd);padding:1.6rem 0 1.4rem;margin-top:0}
         <div class="delivery-option selected" id="opt-efectivo" onclick="selectPayment('efectivo')">
           <div class="delivery-radio"><div class="delivery-radio-dot"></div></div>
           <div class="delivery-info">
-            <div class="delivery-name">Efectivo / Transferencia</div>
-            <div class="delivery-desc">Coordinamos el pago al momento de la entrega o por transferencia bancaria.</div>
+            <div class="delivery-name">Efectivo</div>
+            <div class="delivery-desc">Pagás en efectivo al momento de retirar o recibir tu pedido.</div>
           </div>
           <div class="delivery-price">Gratis</div>
         </div>
@@ -959,7 +958,7 @@ footer{background:var(--vd);padding:1.6rem 0 1.4rem;margin-top:0}
       <div class="order-summary" id="ose"></div>
     </div>
     <div id="payment-info-box" style="background:var(--vp);border-radius:12px;padding:1rem 1.1rem;margin-bottom:1.2rem;font-size:.82rem;color:var(--vd);line-height:1.6">
-      💵 <strong>Efectivo / Transferencia:</strong> Al confirmar, te contactamos por WhatsApp para coordinar el pago y la entrega.
+      💵 <strong>Efectivo:</strong> Al confirmar te contactamos por WhatsApp para coordinar el pago y la entrega.
     </div>
     <div class="btn-row">
       <button class="submit-btn btn-back" onclick="goToStep(2)">← Atrás</button>
@@ -1124,7 +1123,7 @@ const PRODUCTS = [
 ];
 
 /* 💡 MODIFICAR costo de envío */
-const COSTO_ENVIO = 1500;
+const COSTO_ENVIO = 0; // El costo real se coordina por WhatsApp según la ubicación del cliente
 
 /* =============================================
    ESTADO GLOBAL
@@ -1616,11 +1615,11 @@ function renderSummaryStep1(){
     `<div class="summary-total"><span>Total productos</span><span>$${getTotal().toLocaleString('es-AR')}</span></div>`;
 }
 function renderFinalSummary(){
-  const sub=getTotal(), envio=deliveryType==='domicilio'?COSTO_ENVIO:0, tot=sub+envio;
+  const sub=getTotal(), tot=sub;
   document.getElementById('ossf').innerHTML=
     Object.values(cart).map(i=>`<div class="summary-item"><span>${i.emoji} ${i.name} × ${i.qty}</span><span><strong>$${(i.price*i.qty).toLocaleString('es-AR')}</strong></span></div>`).join('')+
-    (envio?`<div class="summary-item"><span>🚚 Envío</span><span><strong>$${envio.toLocaleString('es-AR')}</strong></span></div>`:'')+
-    `<div class="summary-total"><span>Total</span><span>$${tot.toLocaleString('es-AR')}</span></div>`;
+    (deliveryType==='domicilio'?`<div class="summary-item"><span>🚚 Envío</span><span><strong>A coordinar según tu zona</strong></span></div>`:'')+
+    `<div class="summary-total"><span>${deliveryType==='domicilio'?'Subtotal (sin envío)':'Total'}</span><span>$${tot.toLocaleString('es-AR')}</span></div>`;
   const n=document.getElementById('nombre').value, a=document.getElementById('apellido').value;
   const e=document.getElementById('email').value, t=document.getElementById('telefono').value;
   document.getElementById('osd').innerHTML=
@@ -1628,7 +1627,7 @@ function renderFinalSummary(){
      <div class="summary-item"><span>Email</span><span><strong>${e}</strong></span></div>
      <div class="summary-item"><span>WhatsApp</span><span><strong>${t}</strong></span></div>`;
   let ent='';
-  if(deliveryType==='retiro'){ ent=`<div class="summary-item"><span>Modalidad</span><span><strong>Retiro — Gratis</strong></span></div>`; }
+  if(deliveryType==='retiro'){ ent=`<div class="summary-item"><span>Modalidad</span><span><strong>Retirar en el local — Gratis</strong></span></div>`; }
   else {
     const c=document.getElementById('calle').value, p=document.getElementById('piso').value;
     const b=document.getElementById('barrio').value, l=document.getElementById('localidad').value, r=document.getElementById('referencias').value;
@@ -1637,7 +1636,7 @@ function renderFinalSummary(){
          <div class="summary-item"><span>Barrio / Localidad</span><span><strong>${b}, ${l}</strong></span></div>
          ${r?`<div class="summary-item"><span>Referencias</span><span><strong>${r}</strong></span></div>`:''}`;
   }
-  ent += `<div class="summary-item"><span>Pago</span><span><strong>${selectedPayment==='mercadopago'?'💳 MercadoPago':'💵 Efectivo / Transferencia'}</strong></span></div>`;
+  ent += `<div class="summary-item"><span>Pago</span><span><strong>${selectedPayment==='mercadopago'?'💳 MercadoPago':'💵 Efectivo'}</strong></span></div>`;
   document.getElementById('ose').innerHTML=ent;
 
   // Actualizar cuadro informativo y botón según método de pago
@@ -1647,7 +1646,7 @@ function renderFinalSummary(){
     infoBox.innerHTML='💳 <strong>MercadoPago:</strong> Al confirmar serás redirigido al sitio seguro de MercadoPago para completar el pago con tarjeta, débito o cuotas.';
     if(confirmBtn) confirmBtn.textContent='Ir a pagar con MercadoPago →';
   } else {
-    infoBox.innerHTML='💵 <strong>Efectivo / Transferencia:</strong> Al confirmar te contactamos por WhatsApp para coordinar el pago y la entrega.';
+    infoBox.innerHTML='💵 <strong>Efectivo:</strong> Al confirmar te contactamos por WhatsApp para coordinar el pago y la entrega.';
     if(confirmBtn) confirmBtn.textContent='✓ Confirmar pedido';
   }
 }
@@ -1671,7 +1670,7 @@ function clearSavedAddress(){
 async function submitOrder(){
   const n=document.getElementById('nombre').value, a=document.getElementById('apellido').value;
   const e=document.getElementById('email').value, t=document.getElementById('telefono').value;
-  const tot=getTotal()+(deliveryType==='domicilio'?COSTO_ENVIO:0);
+  const tot=getTotal();
   saveAddressToProfile().catch(()=>{});
   if(selectedPayment==='mercadopago'){
     await processMercadoPago(n,a,e,t,tot);
@@ -1688,9 +1687,7 @@ async function processMercadoPago(nombre,apellido,email,telefono,total){
     id:String(i.id), title:i.name, description:i.desc,
     quantity:i.qty, unit_price:i.price, currency_id:'ARS'
   }));
-  if(deliveryType==='domicilio'){
-    mpItems.push({ id:'envio', title:'Envío a domicilio', quantity:1, unit_price:COSTO_ENVIO, currency_id:'ARS' });
-  }
+  // El costo de envío se coordina por separado vía WhatsApp
 
   const origin=window.location.origin||'https://tu-sitio.netlify.app';
 
@@ -1738,12 +1735,12 @@ function showSuccessPage(nombre,apellido,email,total,paymentMethod){
   }
   const payRow=paymentMethod==='mercadopago'
     ?'<div class="success-row"><span>Pago</span><strong>✅ Aprobado por MercadoPago</strong></div>'
-    :'<div class="success-row"><span>Pago</span><strong>💵 Efectivo / Transferencia</strong></div>';
+    :'<div class="success-row"><span>Pago</span><strong>💵 Efectivo</strong></div>';
   document.getElementById('success-detail').innerHTML=
     `<div class="success-row"><span>Cliente</span><strong>${nombre} ${apellido}</strong></div>
      <div class="success-row"><span>Email</span><strong>${email}</strong></div>
      <div class="success-row"><span>Productos</span><strong>${Object.values(cart).map(i=>`${i.name} ×${i.qty}`).join(', ')}</strong></div>
-     <div class="success-row"><span>Entrega</span><strong>${deliveryType==='retiro'?'Retiro en punto de entrega':'Envío a domicilio'}</strong></div>
+     <div class="success-row"><span>Entrega</span><strong>${deliveryType==='retiro'?'Retirar en el local':'Envío a domicilio'}</strong></div>
      ${payRow}
      <div class="success-row"><span>Total</span><strong>$${total.toLocaleString('es-AR')}</strong></div>`;
   document.getElementById('checkout-view').classList.remove('active');
@@ -1768,7 +1765,7 @@ function checkPaymentReturn(){
     if(paymentId) html+=`<div class="success-row"><span>N° de operación</span><strong>${paymentId}</strong></div>`;
     if(pending){
       html+=`<div class="success-row"><span>Cliente</span><strong>${pending.nombre} ${pending.apellido}</strong></div>
-             <div class="success-row"><span>Entrega</span><strong>${pending.deliveryType==='retiro'?'Retiro en punto de entrega':'Envío a domicilio'}</strong></div>
+             <div class="success-row"><span>Entrega</span><strong>${pending.deliveryType==='retiro'?'Retirar en el local':'Envío a domicilio'}</strong></div>
              <div class="success-row"><span>Total</span><strong>$${pending.total.toLocaleString('es-AR')}</strong></div>`;
     }
     document.getElementById('success-detail').innerHTML=html;
