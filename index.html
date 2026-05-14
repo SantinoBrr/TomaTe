@@ -1655,55 +1655,97 @@ function renderFinalSummary(){
   }
 }
 /* =============================================
-   CÁLCULO DE ENVÍO
+   CÁLCULO DE ENVÍO — Algoritmo tipo PedidosYa
+   Cargo base + tarifa por km con tasa decreciente.
    Local: Roberto Wernicke 1534, Villa Adelina, San Isidro
    ============================================= */
 const LOCAL_LAT = -34.5031;
 const LOCAL_LNG = -58.5265;
 
-// 💡 MODIFICAR tarifas según tu criterio:
-const SHIPPING_RATES = [
-  { maxKm:  5, price:  1200, label: 'zona cercana'   },
-  { maxKm: 15, price:  1800, label: 'GBA zona 1'     },
-  { maxKm: 30, price:  2500, label: 'GBA zona 2'     },
-  { maxKm: 50, price:  3500, label: 'GBA zona 3'     },
-  { maxKm: Infinity, price: null, label: 'zona lejana' },
-];
+// 💡 Ajustá estos valores si cambian los precios del mercado
+const ENVIO = {
+  BASE:   600,   // Cargo base fijo (equivale al costo operativo mínimo)
+  MINIMO: 1000,  // Nunca cobrar menos que esto
+  MAX_KM: 40,    // Sin cobertura más allá de esta distancia
+  // Tramos de km con tarifa decreciente (igual que apps de delivery)
+  TRAMOS: [
+    { hasta:  2, por_km: 380 }, // Primeros 2 km: más caro por km (costo fijo diluido)
+    { hasta:  6, por_km: 260 }, // 2–6 km
+    { hasta: 15, por_km: 195 }, // 6–15 km
+    { hasta: 40, por_km: 160 }, // 15–40 km: más barato por km (economía de escala)
+  ]
+};
+
+// Dado un valor en km, devuelve el precio redondeado al $50 más cercano
+function tarifaEnvio(km) {
+  if (km > ENVIO.MAX_KM) return null;
+  let precio = ENVIO.BASE;
+  let acum = 0;
+  for (const t of ENVIO.TRAMOS) {
+    if (km <= acum) break;
+    const en_tramo = Math.min(km - acum, t.hasta - acum);
+    precio += en_tramo * t.por_km;
+    acum = t.hasta;
+  }
+  return Math.max(ENVIO.MINIMO, Math.round(precio / 50) * 50);
+}
 
 function haversineKm(lat1, lng1, lat2, lng2) {
   const R = 6371;
   const dLat = (lat2 - lat1) * Math.PI / 180;
   const dLng = (lng2 - lng1) * Math.PI / 180;
-  const a = Math.sin(dLat/2)**2 + Math.cos(lat1*Math.PI/180)*Math.cos(lat2*Math.PI/180)*Math.sin(dLng/2)**2;
-  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+  const a = Math.sin(dLat / 2) ** 2
+    + Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180)
+    * Math.sin(dLng / 2) ** 2;
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
 }
 
+let _geocodeTimer = null;
 async function calcularEnvio() {
-  const barrio   = document.getElementById('barrio').value.trim();
-  const localidad= document.getElementById('localidad').value.trim();
-  const calle    = document.getElementById('calle').value.trim();
-  const el       = document.getElementById('shipping-cost-display');
+  const barrio    = document.getElementById('barrio').value.trim();
+  const localidad = document.getElementById('localidad').value.trim();
+  const calle     = document.getElementById('calle').value.trim();
+  const el        = document.getElementById('shipping-cost-display');
   if (!el) return;
+
+  window._envioCalculado = 0;
   if (!barrio && !localidad) { el.textContent = ''; return; }
 
-  el.textContent = '⏳ Calculando...';
-  const query = encodeURIComponent(`${calle} ${barrio} ${localidad} Buenos Aires Argentina`);
-  try {
-    const res  = await fetch(`https://nominatim.openstreetmap.org/search?q=${query}&format=json&limit=1`,
-      { headers: { 'Accept-Language': 'es' } });
-    const data = await res.json();
-    if (!data.length) { el.textContent = 'No pudimos calcular el envío. Se coordinará por WhatsApp.'; return; }
-    const km = haversineKm(LOCAL_LAT, LOCAL_LNG, parseFloat(data[0].lat), parseFloat(data[0].lon));
-    const tier = SHIPPING_RATES.find(r => km <= r.maxKm);
-    if (tier.price === null) {
-      el.innerHTML = `📍 ${km.toFixed(0)} km — <strong>Zona sin cobertura de envío.</strong> Contactanos para coordinar.`;
-    } else {
-      el.innerHTML = `📍 ${km.toFixed(0)} km de distancia — Envío estimado: <strong>$${tier.price.toLocaleString('es-AR')}</strong> (${tier.label})`;
-      window._envioCalculado = tier.price;
+  el.innerHTML = '<span style="opacity:.6">⏳ Calculando costo de envío...</span>';
+
+  // Debounce: esperar 800ms después de que el usuario deja de escribir
+  clearTimeout(_geocodeTimer);
+  _geocodeTimer = setTimeout(async () => {
+    const query = encodeURIComponent(
+      [calle, barrio, localidad, 'Buenos Aires', 'Argentina'].filter(Boolean).join(' ')
+    );
+    try {
+      const res  = await fetch(
+        `https://nominatim.openstreetmap.org/search?q=${query}&format=json&limit=1`,
+        { headers: { 'Accept-Language': 'es', 'User-Agent': 'TomaTe-shop/1.0' } }
+      );
+      const data = await res.json();
+
+      if (!data.length) {
+        el.innerHTML = '⚠️ No encontramos esa dirección. El costo de envío se coordinará por WhatsApp.';
+        return;
+      }
+
+      const km     = haversineKm(LOCAL_LAT, LOCAL_LNG, +data[0].lat, +data[0].lon);
+      const precio = tarifaEnvio(km);
+
+      if (precio === null) {
+        el.innerHTML = `📍 <strong>${km.toFixed(1)} km</strong> — Zona fuera de cobertura. Escribinos para coordinar el envío.`;
+      } else {
+        window._envioCalculado = precio;
+        el.innerHTML =
+          `📍 <strong>${km.toFixed(1)} km</strong> de distancia &nbsp;·&nbsp; `+
+          `Envío: <strong style="color:var(--vd)">$${precio.toLocaleString('es-AR')}</strong>`;
+      }
+    } catch {
+      el.innerHTML = '⚠️ No pudimos calcular el envío. Se coordinará por WhatsApp.';
     }
-  } catch {
-    el.textContent = 'No pudimos calcular el envío. Se coordinará por WhatsApp.';
-  }
+  }, 800);
 }
 
 function selectDelivery(t){
