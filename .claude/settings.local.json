@@ -1,0 +1,12 @@
+{
+  "permissions": {
+    "allow": [
+      "PowerShell(Start-Process \"chrome.exe\" -ArgumentList \"C:\\\\Users\\\\santi\\\\Desktop\\\\Tomte\\\\index.html\")",
+      "WebFetch(domain:www.mercadopago.com.ar)",
+      "Bash(New-Item -ItemType Directory -Force \"C:\\\\Users\\\\santi\\\\Desktop\\\\Tomte\\\\netlify\\\\functions\")",
+      "Bash(Out-Null)",
+      "Bash(Write-Output \"ok\")",
+      "PowerShell(New-Item *)"
+    ]
+  }
+}
